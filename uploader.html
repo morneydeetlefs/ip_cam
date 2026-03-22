@@ -24,22 +24,30 @@
     const SCRIPT_URL = 'https://script.google.com/macros/s/YOUR_APPS_SCRIPT_ID/exec';
 
     function updateImage() {
-      fetch(SCRIPT_URL)
-        .then(r => {
-          if (!r.ok) throw new Error('Fetch failed');
-          return r.text();
-        })
-        .then(base64Data => {
-          if (base64Data.startsWith('data:image')) {
-            IMG_ELEMENT.src = base64Data + '?t=' + Date.now();  // cache bust
-            STATUS.textContent = 'Updated: ' + new Date().toLocaleTimeString();
-          } else {
-            STATUS.textContent = 'No valid image yet';
-          }
-        })
-        .catch(err => {
-          STATUS.textContent = 'Error loading: ' + err.message;
-        });
+      fetch(SCRIPT_URL, {
+  method: 'POST',
+  redirect: 'follow',                  // ← Critical: follows any 302 redirects
+  headers: {
+    'Content-Type': 'text/plain;charset=utf-8'
+  },
+  body: JSON.stringify({ image: dataUrl })
+})
+.then(response => {
+  if (!response.ok) {
+    throw new Error(`Server responded ${response.status}`);
+  }
+  return response.text();
+})
+.then(text => {
+  console.log('Raw response:', text);
+  status.textContent = text.includes('OK') ? 'Snapshot sent OK' : text;
+  status.style.color = '#0f0';
+})
+.catch(err => {
+  console.error('Fetch failed:', err);
+  status.textContent = 'Upload error: ' + err.message;
+  status.style.color = '#f44';
+});
     }
 
     updateImage();                    // immediate

@@ -139,9 +139,18 @@
       // Prepare JSON payload
       const payload = JSON.stringify({ image: dataUrl });
 
+      
+
       // Fill hidden form and submit
       document.getElementById('jsonDataField').value = payload;
       document.getElementById('uploadForm').action = SCRIPT_URL;
+
+      // Small delay helps in some browsers to ensure value is set
+  setTimeout(() => {
+    form.submit();
+    statusEl.textContent = 'Snapshot sent → ' + new Date().toLocaleTimeString();
+    statusEl.className = 'success';
+  }, 100);
       document.getElementById('uploadForm').submit();
 
       statusEl.textContent = 'Snapshot sent → ' + new Date().toLocaleTimeString();

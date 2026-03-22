@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Phone Snapshot Uploader</title>
-  <!-- Suppress favicon 404 noise -->
+  <!-- Suppress favicon 404 in console -->
   <link rel="icon" href="data:,">
   <style>
     body {
@@ -76,10 +76,13 @@
 
   <p id="status">Initializing camera…</p>
 
-  <!-- Hidden form to bypass fetch/CORS issues -->
-  <form id="uploadForm" action="" method="POST" style="display:none;">
+  <!-- Hidden form that sends data without leaving the page -->
+  <form id="uploadForm" action="" method="POST" target="hiddenIframe" style="display:none;">
     <input type="hidden" name="jsonData" id="jsonDataField">
   </form>
+
+  <!-- Invisible iframe that receives the "OK" response -->
+  <iframe name="hiddenIframe" style="display:none; width:0; height:0; border:none;"></iframe>
 
   <script>
     const videoEl       = document.getElementById('video');
@@ -90,15 +93,15 @@
     const intervalSpan  = document.getElementById('currentInterval');
     const intervalInput = document.getElementById('intervalInput');
 
-    // ← Replace with your actual deployed Apps Script web app URL
-    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw6gf1y6JIoNJYqcY_0UwS-XHlc1Y0Dmpu381Pvard6pSS4ITGwJqv9UVcJGcxjoRuL/exec';
+    // ← Replace with your current deployed Apps Script web app URL
+    const SCRIPT_URL = 'https://script.google.com/macros/s/YOUR_APPS_SCRIPT_ID_HERE/exec';
 
     let captureIntervalMs = 30000;  // 30 seconds default
     let timerId = null;
 
-    // Start camera (rear camera preferred)
+    // Start rear camera
     navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment' }   // ← change to 'user' for front camera
+      video: { facingMode: 'environment' }   // change to 'user' for selfie camera
     })
     .then(stream => {
       videoEl.srcObject = stream;
@@ -119,7 +122,7 @@
         return;
       }
 
-      // Capture frame
+      // Capture current frame
       canvasEl.width = videoEl.videoWidth;
       canvasEl.height = videoEl.videoHeight;
       ctx.drawImage(videoEl, 0, 0);
@@ -133,24 +136,15 @@
 
       const dataUrl = canvasEl.toDataURL('image/jpeg', 0.65);
 
-      // Show locally
+      // Show preview on page
       previewEl.src = dataUrl;
 
       // Prepare JSON payload
       const payload = JSON.stringify({ image: dataUrl });
 
-      
-
-      // Fill hidden form and submit
+      // Fill form and submit to hidden iframe
       document.getElementById('jsonDataField').value = payload;
       document.getElementById('uploadForm').action = SCRIPT_URL;
-
-      // Small delay helps in some browsers to ensure value is set
-  setTimeout(() => {
-    form.submit();
-    statusEl.textContent = 'Snapshot sent → ' + new Date().toLocaleTimeString();
-    statusEl.className = 'success';
-  }, 100);
       document.getElementById('uploadForm').submit();
 
       statusEl.textContent = 'Snapshot sent → ' + new Date().toLocaleTimeString();
@@ -174,7 +168,7 @@
       statusEl.className = 'success';
     }
 
-    // Optional: stop camera when page is closed (good practice)
+    // Clean up camera tracks when leaving page
     window.addEventListener('beforeunload', () => {
       if (videoEl.srcObject) {
         videoEl.srcObject.getTracks().forEach(track => track.stop());

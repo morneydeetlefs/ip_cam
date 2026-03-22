@@ -12,10 +12,13 @@
   </style>
 </head>
 <body>
+  
   <h1>Live Snapshots (~every 30s)</h1>
   <img id="cam" src="data:image/jpeg;base64," alt="Live snapshot" onerror="this.src='data:image/jpeg;base64,';">
   <p id="status">Loading latest snapshot...</p>
-
+<form id="proxyForm" action="" method="POST" style="display:none;">
+  <input type="hidden" name="jsonData" id="jsonPayload">
+</form>
   <script>
     const IMG_ELEMENT = document.getElementById('cam');
     const STATUS      = document.getElementById('status');

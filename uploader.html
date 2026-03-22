@@ -4,26 +4,28 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Phone Snapshot → Drive Overwrite</title>
+  <!-- Silences favicon 404 error -->
+  <link rel="icon" href="data:,">
   <style>
-    body { font-family: sans-serif; text-align: center; background: #111; color: #eee; }
-    video, img { max-width: 90%; margin: 10px auto; display: block; border: 2px solid #444; }
-    button { padding: 12px 24px; font-size: 1.1em; margin: 10px; }
-    #status { color: #0f0; }
+    body { font-family: sans-serif; text-align: center; background: #111; color: #eee; padding: 10px; }
+    video, img { max-width: 90%; margin: 10px auto; display: block; border: 2px solid #444; border-radius: 8px; }
+    button { padding: 12px 24px; font-size: 1.1em; margin: 10px; background: #444; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+    button:hover { background: #666; }
+    #status { color: #0f0; font-weight: bold; margin: 15px 0; }
+    label { margin-right: 8px; }
   </style>
 </head>
 <body>
   <h2>Old Phone → Live Snapshot Uploader</h2>
   <p>Keep this tab open & phone charging. Updates every <span id="interval">30</span> seconds.</p>
+
   <video id="video" autoplay playsinline muted></video>
   <canvas id="canvas" style="display:none;"></canvas>
-  <img id="preview" alt="Latest captured">
+  <img id="preview" alt="Latest captured snapshot">
 
-  <div>
-    <form id="hiddenForm" action="https://script.google.com/macros/s/AKfycbyEqCAvSf23Y1bxwtH5DJhlz24dLPg8--GqfszfMsHPZT8NUAERoiOky9AwK-sgSm6CBw/exec" method="POST" style="display:none;">
-     <input type="hidden" name="image" id="hiddenImage">
-</form>
+  <div style="margin: 20px 0;">
     <label>Interval (seconds): </label>
-    <input type="number" id="sec" value="30" min="10" max="300" style="width:80px;">
+    <input type="number" id="sec" value="30" min="10" max="300" style="width:80px; padding:6px;">
     <button onclick="updateInterval()">Apply</button>
   </div>
 
@@ -36,58 +38,88 @@
     const preview = document.getElementById('preview');
     const status = document.getElementById('status');
 
-    const SCRIPT_URL = 'https://script.google.com/macros/s/YOUR_APPS_SCRIPT_ID/exec';  // ← Paste your web app URL here
+    // ← Paste your actual deployed web app URL here (from Deploy → Manage deployments)
+    const SCRIPT_URL = 'https://script.google.com/macros/s/YOUR_APPS_SCRIPT_ID/exec';
 
-    let intervalMs = 30000;   // default 30s
+    let intervalMs = 30000;   // default 30 seconds
     let timer = null;
 
-    // Start camera (rear by default)
+    // Start rear camera
     navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment' }   // 'user' for front camera
+      video: { facingMode: 'environment' }   // change to 'user' for front camera
     })
     .then(stream => {
       video.srcObject = stream;
-      status.textContent = 'Camera ready. Capturing...';
-      captureAndUpload();          // first capture
+      status.textContent = 'Camera ready. First capture starting...';
+      status.style.color = '#0f0';
+      captureAndUpload();  // immediate first snapshot
       timer = setInterval(captureAndUpload, intervalMs);
     })
     .catch(err => {
-      status.textContent = 'Camera error: ' + err.message;
+      status.textContent = 'Camera access denied or error: ' + err.message;
       status.style.color = '#f44';
+      console.error('getUserMedia error:', err);
     });
 
     function captureAndUpload() {
-  if (video.videoWidth === 0) return;
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
+        status.textContent = 'Waiting for video stream...';
+        return;
+      }
 
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  ctx.drawImage(video, 0, 0);
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0);
 
-  // overlay timestamp (optional)
-  ctx.fillStyle = 'rgba(0,0,0,0.5)';
-  ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
-  ctx.fillStyle = '#fff';
-  ctx.font = '16px Arial';
-  ctx.fillText(new Date().toLocaleString(), 10, canvas.height - 15);
+      // Optional timestamp overlay
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+      ctx.fillStyle = '#fff';
+      ctx.font = '16px Arial';
+      ctx.fillText(new Date().toLocaleString(), 10, canvas.height - 15);
 
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
-  preview.src = dataUrl;
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.65);  // quality 0.65 = good balance size/quality
+      preview.src = dataUrl;  // show locally
 
-  document.getElementById('hiddenImage').value = dataUrl;
-  document.getElementById('hiddenForm').submit();  // sends POST, no CORS issue
-
-  status.textContent = 'Sending snapshot...';
-}
+      // Send as JSON in text/plain body (avoids CORS preflight)
+      fetch(SCRIPT_URL, {
+        method: 'POST',
+        mode: 'cors',
+        redirect: 'follow',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8'
+        },
+        body: JSON.stringify({ image: dataUrl })
+      })
+      .then(response => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.text();
+      })
+      .then(text => {
+        status.textContent = text.trim() === 'OK' ? 'Snapshot uploaded & file overwritten successfully' : text;
+        status.style.color = '#0f0';
+        console.log('Server response:', text);
+      })
+      .catch(err => {
+        status.textContent = 'Upload failed: ' + err.message;
+        status.style.color = '#f44';
+        console.error('Fetch error:', err);
+      });
+    }
 
     function updateInterval() {
       const sec = parseInt(document.getElementById('sec').value);
-      if (sec >= 10 && sec <= 300) {
-        intervalMs = sec * 1000;
-        clearInterval(timer);
-        timer = setInterval(captureAndUpload, intervalMs);
-        document.getElementById('interval').textContent = sec;
-        status.textContent = `Interval updated to ${sec}s`;
+      if (isNaN(sec) || sec < 10 || sec > 300) {
+        status.textContent = 'Interval must be 10–300 seconds';
+        status.style.color = '#f44';
+        return;
       }
+      intervalMs = sec * 1000;
+      clearInterval(timer);
+      timer = setInterval(captureAndUpload, intervalMs);
+      document.getElementById('interval').textContent = sec;
+      status.textContent = `Updated: snapshots every ${sec} seconds`;
+      status.style.color = '#0f0';
     }
   </script>
 </body>

@@ -3,58 +3,175 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>My Phone Snapshot Cam</title>
+  <title>Phone Snapshot Uploader</title>
+  <!-- Suppress favicon 404 noise -->
+  <link rel="icon" href="data:,">
   <style>
-    body { margin:0; background:#000; color:#eee; font-family:sans-serif; text-align:center; }
-    img { width:100%; max-width:800px; display:block; margin:20px auto; background:#222; }
-    h1 { margin:20px; }
-    #status { color:#f90; }
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      background: #111;
+      color: #eee;
+      padding: 15px;
+      margin: 0;
+    }
+    h2 {
+      margin: 15px 0 5px;
+    }
+    video, img {
+      max-width: 90%;
+      margin: 10px auto;
+      display: block;
+      border: 2px solid #444;
+      border-radius: 8px;
+      background: #000;
+    }
+    .controls {
+      margin: 20px 0;
+    }
+    label {
+      margin-right: 8px;
+    }
+    input[type="number"] {
+      width: 80px;
+      padding: 6px;
+      font-size: 1em;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 1em;
+      background: #444;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #666;
+    }
+    #status {
+      margin: 20px 0;
+      font-weight: bold;
+      min-height: 1.4em;
+    }
+    .success { color: #0f0; }
+    .error   { color: #f44; }
   </style>
 </head>
 <body>
-  
-  <h1>Live Snapshots (~every 30s)</h1>
-  <img id="cam" src="data:image/jpeg;base64," alt="Live snapshot" onerror="this.src='data:image/jpeg;base64,';">
-  <p id="status">Loading latest snapshot...</p>
-<form id="proxyForm" action="" method="POST" style="display:none;">
-  <input type="hidden" name="jsonData" id="jsonPayload">
-</form>
+
+  <h2>Old Phone → Snapshot Uploader</h2>
+  <p>Keep this page open and phone charging.<br>
+     Snapshots sent every <span id="currentInterval">30</span> seconds.</p>
+
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="canvas" style="display:none;"></canvas>
+  <img id="preview" alt="Latest snapshot preview">
+
+  <div class="controls">
+    <label>Interval (seconds):</label>
+    <input type="number" id="intervalInput" value="30" min="10" max="300">
+    <button onclick="updateInterval()">Update</button>
+  </div>
+
+  <p id="status">Initializing camera…</p>
+
+  <!-- Hidden form to bypass fetch/CORS issues -->
+  <form id="uploadForm" action="" method="POST" style="display:none;">
+    <input type="hidden" name="jsonData" id="jsonDataField">
+  </form>
+
   <script>
-    const IMG_ELEMENT = document.getElementById('cam');
-    const STATUS      = document.getElementById('status');
+    const videoEl       = document.getElementById('video');
+    const canvasEl      = document.getElementById('canvas');
+    const ctx           = canvasEl.getContext('2d');
+    const previewEl     = document.getElementById('preview');
+    const statusEl      = document.getElementById('status');
+    const intervalSpan  = document.getElementById('currentInterval');
+    const intervalInput = document.getElementById('intervalInput');
 
-    // Your Apps Script web app URL
-    const SCRIPT_URL = 'https://script.google.com/macros/s/YOUR_APPS_SCRIPT_ID/exec';
+    // ← Replace with your actual deployed Apps Script web app URL
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyEqCAvSf23Y1bxwtH5DJhlz24dLPg8--GqfszfMsHPZT8NUAERoiOky9AwK-sgSm6CBw/exec';
 
-    function updateImage() {
-      fetch(SCRIPT_URL, {
-  method: 'POST',
-  redirect: 'follow',                  // ← Critical: follows any 302 redirects
-  headers: {
-    'Content-Type': 'text/plain;charset=utf-8'
-  },
-  body: JSON.stringify({ image: dataUrl })
-})
-.then(response => {
-  if (!response.ok) {
-    throw new Error(`Server responded ${response.status}`);
-  }
-  return response.text();
-})
-.then(text => {
-  console.log('Raw response:', text);
-  status.textContent = text.includes('OK') ? 'Snapshot sent OK' : text;
-  status.style.color = '#0f0';
-})
-.catch(err => {
-  console.error('Fetch failed:', err);
-  status.textContent = 'Upload error: ' + err.message;
-  status.style.color = '#f44';
-});
+    let captureIntervalMs = 30000;  // 30 seconds default
+    let timerId = null;
+
+    // Start camera (rear camera preferred)
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' }   // ← change to 'user' for front camera
+    })
+    .then(stream => {
+      videoEl.srcObject = stream;
+      statusEl.textContent = 'Camera started. Capturing first snapshot…';
+      statusEl.className = 'success';
+      captureAndSend();               // first capture immediately
+      timerId = setInterval(captureAndSend, captureIntervalMs);
+    })
+    .catch(err => {
+      statusEl.textContent = 'Camera error: ' + err.message;
+      statusEl.className = 'error';
+      console.error('getUserMedia failed:', err);
+    });
+
+    function captureAndSend() {
+      if (videoEl.videoWidth === 0 || videoEl.videoHeight === 0) {
+        statusEl.textContent = 'Waiting for video dimensions…';
+        return;
+      }
+
+      // Capture frame
+      canvasEl.width = videoEl.videoWidth;
+      canvasEl.height = videoEl.videoHeight;
+      ctx.drawImage(videoEl, 0, 0);
+
+      // Add timestamp overlay
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(0, canvasEl.height - 45, canvasEl.width, 45);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '16px Arial';
+      ctx.fillText(new Date().toLocaleString(), 12, canvasEl.height - 18);
+
+      const dataUrl = canvasEl.toDataURL('image/jpeg', 0.65);
+
+      // Show locally
+      previewEl.src = dataUrl;
+
+      // Prepare JSON payload
+      const payload = JSON.stringify({ image: dataUrl });
+
+      // Fill hidden form and submit
+      document.getElementById('jsonDataField').value = payload;
+      document.getElementById('uploadForm').action = SCRIPT_URL;
+      document.getElementById('uploadForm').submit();
+
+      statusEl.textContent = 'Snapshot sent → ' + new Date().toLocaleTimeString();
+      statusEl.className = 'success';
     }
 
-    updateImage();                    // immediate
-    setInterval(updateImage, 35000);  // poll every ~35s
+    function updateInterval() {
+      const seconds = parseInt(intervalInput.value, 10);
+      if (isNaN(seconds) || seconds < 10 || seconds > 300) {
+        statusEl.textContent = 'Please enter 10–300 seconds';
+        statusEl.className = 'error';
+        return;
+      }
+
+      captureIntervalMs = seconds * 1000;
+      clearInterval(timerId);
+      timerId = setInterval(captureAndSend, captureIntervalMs);
+
+      intervalSpan.textContent = seconds;
+      statusEl.textContent = `Interval updated to ${seconds} seconds`;
+      statusEl.className = 'success';
+    }
+
+    // Optional: stop camera when page is closed (good practice)
+    window.addEventListener('beforeunload', () => {
+      if (videoEl.srcObject) {
+        videoEl.srcObject.getTracks().forEach(track => track.stop());
+      }
+    });
   </script>
+
 </body>
 </html>

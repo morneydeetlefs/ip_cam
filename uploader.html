@@ -73,18 +73,23 @@
       preview.src = dataUrl;  // local preview
 
       fetch(SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ image: dataUrl })
-      })
-      .then(r => r.text())
-      .then(res => {
-        status.textContent = res === 'OK' ? 'Uploaded & overwritten OK' : res;
-      })
-      .catch(err => {
-        status.textContent = 'Upload failed: ' + err;
-        status.style.color = '#f44';
-      });
+  method: 'POST',
+  mode: 'cors',               // keep this
+  redirect: 'follow',
+  headers: {
+    'Content-Type': 'text/plain;charset=utf-8'   // ← key change: text/plain avoids preflight
+  },
+  body: JSON.stringify({ image: dataUrl })       // send as JSON string
+})
+.then(r => r.text())
+.then(res => {
+  status.textContent = res === 'OK' ? 'Uploaded & overwritten OK' : res;
+  status.style.color = '#0f0';
+})
+.catch(err => {
+  status.textContent = 'Upload failed: ' + err.message;
+  status.style.color = '#f44';
+});
     }
 
     function updateInterval() {

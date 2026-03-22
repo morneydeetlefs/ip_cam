@@ -14,12 +14,14 @@
 <body>
   <h2>Old Phone → Live Snapshot Uploader</h2>
   <p>Keep this tab open & phone charging. Updates every <span id="interval">30</span> seconds.</p>
-
   <video id="video" autoplay playsinline muted></video>
   <canvas id="canvas" style="display:none;"></canvas>
   <img id="preview" alt="Latest captured">
 
   <div>
+    <form id="hiddenForm" action="https://script.google.com/macros/s/AKfycbyEqCAvSf23Y1bxwtH5DJhlz24dLPg8--GqfszfMsHPZT8NUAERoiOky9AwK-sgSm6CBw/exec" method="POST" style="display:none;">
+     <input type="hidden" name="image" id="hiddenImage">
+</form>
     <label>Interval (seconds): </label>
     <input type="number" id="sec" value="30" min="10" max="300" style="width:80px;">
     <button onclick="updateInterval()">Apply</button>
@@ -55,42 +57,27 @@
     });
 
     function captureAndUpload() {
-      if (video.videoWidth === 0) return;  // wait for video ready
+  if (video.videoWidth === 0) return;
 
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0);
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.drawImage(video, 0, 0);
 
-      // Optional: add text overlay (timestamp)
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
-      ctx.fillStyle = '#fff';
-      ctx.font = '16px Arial';
-      ctx.fillText(new Date().toLocaleString(), 10, canvas.height - 15);
+  // overlay timestamp (optional)
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+  ctx.fillStyle = '#fff';
+  ctx.font = '16px Arial';
+  ctx.fillText(new Date().toLocaleString(), 10, canvas.height - 15);
 
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.65);  // 0.65 = good quality / smaller size
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+  preview.src = dataUrl;
 
-      preview.src = dataUrl;  // local preview
+  document.getElementById('hiddenImage').value = dataUrl;
+  document.getElementById('hiddenForm').submit();  // sends POST, no CORS issue
 
-      fetch(SCRIPT_URL, {
-  method: 'POST',
-  mode: 'cors',               // keep this
-  redirect: 'follow',
-  headers: {
-    'Content-Type': 'text/plain;charset=utf-8'   // ← key change: text/plain avoids preflight
-  },
-  body: JSON.stringify({ image: dataUrl })       // send as JSON string
-})
-.then(r => r.text())
-.then(res => {
-  status.textContent = res === 'OK' ? 'Uploaded & overwritten OK' : res;
-  status.style.color = '#0f0';
-})
-.catch(err => {
-  status.textContent = 'Upload failed: ' + err.message;
-  status.style.color = '#f44';
-});
-    }
+  status.textContent = 'Sending snapshot...';
+}
 
     function updateInterval() {
       const sec = parseInt(document.getElementById('sec').value);
